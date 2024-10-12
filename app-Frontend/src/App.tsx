@@ -6,6 +6,7 @@ function App() {
   const [code, setCode] = useState<string>("");
   const [output, setOutput] = useState("");
   const [socket, setSocket] = useState<WebSocket>();
+  const [action, setAction] = useState<string>("stop");
 
   const [language, setLanguage] = useState("javascript"); // Lenguaje por defecto
 
@@ -18,7 +19,7 @@ function App() {
   };
 
   useEffect(() => {
-    const ws = new WebSocket("ws://127.0.0.1:8080/ws");
+    const ws = new WebSocket("ws://localhost:8080/ws");
 
     ws.onopen = () => {
       console.log("Conectado al servidor WebSocket");
@@ -26,8 +27,8 @@ function App() {
 
     ws.onmessage = (event) => {
       console.log("Mensaje recibido:", event);
-      const response = JSON.parse(event.data);
-      setOutput(response.result);
+      const response = event.data;
+      setOutput((prev) => prev + "\n" + response);
     };
 
     ws.onerror = (error) => {
@@ -50,6 +51,17 @@ function App() {
       });
 
       console.log("Enviando comando:", message);
+      socket.send(message);
+    }
+  };
+  const stopExec = () => {
+    setAction("stop");
+    if (socket) {
+      const message = JSON.stringify({
+        action: action,
+      });
+
+      console.log("Stop send:", message);
       socket.send(message);
     }
   };
@@ -77,6 +89,7 @@ function App() {
 
         <div>
           <button onClick={() => executeCommand()}>Ejecutar Código</button>
+          <button onClick={() => stopExec()}>Stop</button>
         </div>
       </div>
 

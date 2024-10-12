@@ -1,32 +1,41 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
+	"syscall"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
 
 type CodeRequest struct {
-	Lang string `json:"lang"`
-	Code string `json:"code"`
+	Lang   string `json:"lang"`
+	Code   string `json:"code"`
+	Action string `json:"action,omitempty"`
 }
-type CodeResponse struct {
-	Result string `json:"result"`
+
+type Client struct {
+	conn     *websocket.Conn
+	cmdChan  chan *exec.Cmd
+	stopChan chan struct{}
+	stopOnce sync.Once
 }
 
 func enableCors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*") // Permite todas las solicitudes
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
-		// Si es una solicitud OPTIONS (preflight), respondemos con un 200 y terminamos
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -38,37 +47,76 @@ func enableCors(next http.Handler) http.Handler {
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return true // Permite todas las solicitudes de origen
+		return true
 	},
 }
 
-func executeCode(lang string, code string) (string, error) {
-	// Crear un archivo temporal según el lenguaje
+func executeCode(lang string, code string, client *Client) {
 	var filename string
-	fmt.Println(lang)
 	switch lang {
 	case "javascript":
 		filename = "temp.js"
 		os.WriteFile(filename, []byte(code), 0644)
-		return runDockerCommand("node:latest", "node", filename)
+		runDockerCommand("node:latest", "node", filename, client)
 	case "python":
 		filename = "temp.py"
 		os.WriteFile(filename, []byte(code), 0644)
-		return runDockerCommand("python:latest", "python", filename)
+		runDockerCommand("python:latest", "python", filename, client)
 	default:
-		return "", fmt.Errorf("language not supported")
+		client.conn.WriteMessage(websocket.TextMessage, []byte("Error: lenguaje no soportado"))
 	}
 }
 
-func runDockerCommand(image, command, filename string) (string, error) {
-	// Ejecutar el código en un contenedor Docker
-	cmd := exec.Command("docker", "run", "--rm", "-v", fmt.Sprintf("%s:/app", filepath.Dir(filename)), "-w", "/app", image, command, filepath.Base(filename))
-	output, err := cmd.CombinedOutput()
+func runDockerCommand(image, command, filename string, client *Client) {
+	cmd := exec.Command("docker", "run", "--rm", "-i", "-v", fmt.Sprintf("%s:/app", filepath.Dir(filename)), "-w", "/app", image, command, filepath.Base(filename))
+
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", err
+		client.conn.WriteMessage(websocket.TextMessage, []byte("Error al obtener stdout: "+err.Error()))
+		return
 	}
-	fmt.Println(string(output))
-	return string(output), nil
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		client.conn.WriteMessage(websocket.TextMessage, []byte("Error al obtener stderr: "+err.Error()))
+		return
+	}
+
+	// Iniciar el comando en un goroutine
+	go func() {
+		// Enviar los logs al WebSocket
+		go sendLogs(stdout, client)
+		go sendLogs(stderr, client)
+
+		if err := cmd.Start(); err != nil {
+			client.conn.WriteMessage(websocket.TextMessage, []byte("Error al iniciar el comando: "+err.Error()))
+			return
+		}
+
+		log.Println("Proceso Docker iniciado con PID:", cmd.Process.Pid)
+
+		// Aquí se envía el comando al canal
+		client.cmdChan <- cmd
+		log.Println("Comando enviado al canal para posible detención...")
+
+		if err := cmd.Wait(); err != nil {
+			client.conn.WriteMessage(websocket.TextMessage, []byte("Error al ejecutar el comando: "+err.Error()))
+		}
+
+		// Eliminar el comando cuando termine
+		client.cmdChan <- nil
+		log.Println("Comando finalizado y eliminado del canal.")
+	}()
+}
+
+func sendLogs(pipe io.ReadCloser, client *Client) {
+	scanner := bufio.NewScanner(pipe)
+	for scanner.Scan() {
+		message := scanner.Text()
+		client.conn.WriteMessage(websocket.TextMessage, []byte(message))
+	}
+	if err := scanner.Err(); err != nil {
+		log.Println("Error leyendo el log:", err)
+	}
 }
 
 func handleConnection(w http.ResponseWriter, r *http.Request) {
@@ -79,28 +127,94 @@ func handleConnection(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	client := &Client{
+		conn:     conn,
+		cmdChan:  make(chan *exec.Cmd),
+		stopChan: make(chan struct{}),
+	}
+
+	go handleCommands(client)
+
 	for {
-		// Leer el mensaje del cliente
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			log.Println("Error al leer mensaje:", err)
 			break
 		}
-		// Deserializar el mensaje JSON
+
 		var request CodeRequest
 		if err := json.Unmarshal(msg, &request); err != nil {
 			conn.WriteMessage(websocket.TextMessage, []byte("Error de deserialización: "+err.Error()))
 			continue
 		}
 
-		// Ejecutar el código
-		result, err := executeCode(request.Lang, request.Code)
-		ver := CodeResponse{Result: result}
-		res, _ := json.Marshal(ver)
-		if err != nil {
-			conn.WriteMessage(websocket.TextMessage, []byte("Error: "+err.Error()))
-		} else {
-			conn.WriteMessage(websocket.TextMessage, res)
+		// Verificar si el mensaje es una acción de "stop"
+		if request.Action == "stop" {
+			log.Println("Recibida solicitud de parada")
+			client.stopChan <- struct{}{} // Enviar señal de stop, no cerrar el canal
+			continue
+		}
+
+		// Ejecutar el código si no es una acción de parada
+		executeCode(request.Lang, request.Code, client)
+	}
+}
+
+func handleCommands(client *Client) {
+	for {
+		select {
+		case cmd := <-client.cmdChan:
+			if cmd == nil {
+				log.Println("No hay ningún comando en ejecución en el canal")
+				continue
+			}
+			log.Println("Comando recibido en cmdChan, esperando señal de parada...")
+
+			// Iniciar un nuevo goroutine para ejecutar el comando
+			go func() {
+				defer func() {
+					// Limpieza: Cerramos el canal o hacemos otras tareas necesarias
+				}()
+
+				// Esperar a que termine el comando
+				if err := cmd.Wait(); err != nil {
+					log.Println("Error al esperar el comando:", err)
+					return
+				}
+			}()
+
+			// Esperar la señal de parada en otra gorutina
+			go func() {
+				select {
+				case <-client.stopChan: // Esperar a que llegue la señal de stop
+					log.Println("Intentando detener el proceso...")
+					if cmd.Process != nil {
+						// Intentar primero con SIGINT
+						if err := cmd.Process.Signal(os.Interrupt); err != nil {
+							log.Println("Error al enviar señal de interrupción:", err)
+						} else {
+							log.Println("Señal de interrupción enviada.")
+						}
+
+						// Esperar un tiempo para permitir que el proceso maneje la señal
+						time.Sleep(2 * time.Second)
+
+						// Verificar si sigue ejecutándose
+						if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+							log.Println("Error al enviar señal de SIGTERM:", err)
+						} else {
+							log.Println("Señal SIGTERM enviada.")
+						}
+
+						// Si no responde, enviar kill
+						if err := cmd.Process.Kill(); err != nil {
+							log.Println("Error al enviar señal de kill:", err)
+						} else {
+							log.Println("Señal de kill enviada.")
+						}
+					}
+				}
+			}()
 		}
 	}
 }
