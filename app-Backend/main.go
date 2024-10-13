@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	programinglanguages "github.com/Osmait/CodeRunner-web/internal/modules/programingLanguages"
 	"github.com/gorilla/websocket"
 )
 
@@ -52,19 +53,17 @@ var upgrader = websocket.Upgrader{
 }
 
 func executeCode(lang string, code string, client *Client) {
-	var filename string
-	switch lang {
-	case "javascript":
-		filename = "temp.js"
-		os.WriteFile(filename, []byte(code), 0644)
-		runDockerCommand("node:latest", "node", filename, client)
-	case "python":
-		filename = "temp.py"
-		os.WriteFile(filename, []byte(code), 0644)
-		runDockerCommand("python:latest", "python", filename, client)
-	default:
+	availablePrograminLanguages := programinglanguages.NewAvailablePrograminLanguages()
+	languages, err := availablePrograminLanguages.SearchLanguage(lang)
+	if err != nil {
 		client.conn.WriteMessage(websocket.TextMessage, []byte("Error: lenguaje no soportado"))
 	}
+
+	filename := fmt.Sprintf("temp.%s", languages.GetExtension())
+	runner := fmt.Sprintf("%s:latest", languages.GetRunner())
+	fmt.Println(filename)
+	os.WriteFile(filename, []byte(code), 0644)
+	runDockerCommand(runner, languages.GetRunner(), filename, client)
 }
 
 func runDockerCommand(image, command, filename string, client *Client) {
