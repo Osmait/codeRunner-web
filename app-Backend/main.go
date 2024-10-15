@@ -14,7 +14,10 @@ import (
 	"syscall"
 	"time"
 
+	coderunner "github.com/Osmait/CodeRunner-web/internal/app/CodeRunner"
 	programinglanguages "github.com/Osmait/CodeRunner-web/internal/modules/programingLanguages"
+	"github.com/Osmait/CodeRunner-web/internal/modules/runner"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -219,10 +222,13 @@ func handleCommands(client *Client) {
 }
 
 func main() {
-	http.HandleFunc("/ws", handleConnection)
-
-	fmt.Println("Servidor WebSocket escuchando en ws://localhost:8080/ws")
-	if err := http.ListenAndServe(":8080", enableCors(http.DefaultServeMux)); err != nil {
-		log.Fatal("Error al iniciar servidor:", err)
-	}
+	// http.HandleFunc("/ws", handleConnection)
+	//
+	// fmt.Println("Servidor WebSocket escuchando en ws://localhost:8080/ws")
+	// if err := http.ListenAndServe(":8080", enableCors(http.DefaultServeMux)); err != nil {
+	// 	log.Fatal("Error al iniciar servidor:", err)
+	// }
+	runner := runner.NewRunner()
+	app := coderunner.NewCodeRunner(runner)
+	app.RunCode()
 }
