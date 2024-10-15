@@ -12,7 +12,7 @@ import (
 )
 
 type RunnerInterface interface {
-	Execute(code string, lang string, output *dispacher.Dispacher) error
+	Execute(code string, lang string, output *dispacher.Notifier) error
 }
 
 type Runner struct{}
@@ -21,7 +21,7 @@ func NewRunner() *Runner {
 	return &Runner{}
 }
 
-func (r *Runner) Execute(code string, lang string, output *dispacher.Dispacher) error {
+func (r *Runner) Execute(code string, lang string, output *dispacher.Notifier) error {
 	// Ejemplo de comando que se ejecutará (en este caso, ls)
 	cmd := exec.Command("docker", "run", "--rm", "-i", "-v", fmt.Sprintf("%s:/app", filepath.Dir("temp.js")), "-w", "/app", "node:latest", "node", filepath.Base("temp.js"))
 
@@ -59,11 +59,11 @@ func (r *Runner) Execute(code string, lang string, output *dispacher.Dispacher) 
 	return nil
 }
 
-func sendLogs(pipe io.ReadCloser, output *dispacher.Dispacher) {
+func sendLogs(pipe io.ReadCloser, output *dispacher.Notifier) {
 	scanner := bufio.NewScanner(pipe)
 	for scanner.Scan() {
 		message := scanner.Text()
-		output.Notifique([]byte(message))
+		output.Send([]byte(message))
 	}
 	if err := scanner.Err(); err != nil {
 		log.Println("Error leyendo el log:", err)

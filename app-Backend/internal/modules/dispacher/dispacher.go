@@ -1,19 +1,23 @@
 package dispacher
 
-type Dispacher struct {
+type Notifier struct {
 	NotificationChan chan []byte
 }
 
-func NewDispacher(notificationChan chan []byte) *Dispacher {
-	return &Dispacher{
+func NewNotifier(notificationChan chan []byte) *Notifier {
+	return &Notifier{
 		NotificationChan: notificationChan,
 	}
 }
 
-func (d *Dispacher) Notifique(msg []byte) {
+func (d *Notifier) Send(msg []byte) {
 	d.NotificationChan <- msg
 }
 
-func (d *Dispacher) Consumer() <-chan []byte {
+func (d *Notifier) Consumer() <-chan []byte {
 	return d.NotificationChan
+}
+
+func (d *Notifier) Close() {
+	close(d.NotificationChan)
 }

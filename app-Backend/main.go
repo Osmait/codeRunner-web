@@ -225,16 +225,16 @@ func handleCommands(client *Client) {
 func main() {
 	outputs := make(chan []byte)
 	runner := runner.NewRunner()
-	dispacher := dispacher.NewDispacher(outputs)
+	dispacher := dispacher.NewNotifier(outputs)
 	app := coderunner.NewCodeRunner(runner, dispacher)
-
+	defer dispacher.Close()
 	go func() {
 		for msg := range dispacher.Consumer() {
 			fmt.Println(string(msg))
 		}
 	}()
-
 	app.RunCode()
+
 	//
 	// http.HandleFunc("/ws", handleConnection)
 	//

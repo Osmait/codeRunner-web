@@ -8,10 +8,10 @@ import (
 
 type CodeRunner struct {
 	Runner  runner.RunnerInterface
-	outputs *dispacher.Dispacher
+	outputs *dispacher.Notifier
 }
 
-func NewCodeRunner(runner runner.RunnerInterface, outputs *dispacher.Dispacher) *CodeRunner {
+func NewCodeRunner(runner runner.RunnerInterface, outputs *dispacher.Notifier) *CodeRunner {
 	return &CodeRunner{
 		Runner:  runner,
 		outputs: outputs,
