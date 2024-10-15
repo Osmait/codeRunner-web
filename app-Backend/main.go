@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,10 +15,9 @@ import (
 	"syscall"
 	"time"
 
-	coderunner "github.com/Osmait/CodeRunner-web/internal/app/CodeRunner"
 	"github.com/Osmait/CodeRunner-web/internal/modules/dispacher"
 	programinglanguages "github.com/Osmait/CodeRunner-web/internal/modules/programingLanguages"
-	"github.com/Osmait/CodeRunner-web/internal/modules/runner"
+	"github.com/Osmait/CodeRunner-web/internal/server"
 
 	"github.com/gorilla/websocket"
 )
@@ -224,16 +224,13 @@ func handleCommands(client *Client) {
 
 func main() {
 	outputs := make(chan []byte)
-	runner := runner.NewRunner()
 	dispacher := dispacher.NewNotifier(outputs)
-	app := coderunner.NewCodeRunner(runner, dispacher)
-	defer dispacher.Close()
-	go func() {
-		for msg := range dispacher.Consumer() {
-			fmt.Println(string(msg))
-		}
-	}()
-	app.RunCode()
+	if dispacher == nil || dispacher.NotificationChan == nil {
+		log.Fatal("Notifier no se inicializó correctamente")
+	}
+
+	ctx, server := server.New(context.Background(), "127.0.0.1", 8080, dispacher)
+	server.Run(ctx)
 
 	//
 	// http.HandleFunc("/ws", handleConnection)
