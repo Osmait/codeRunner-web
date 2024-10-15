@@ -8,11 +8,11 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	programinglanguages "github.com/Osmait/CodeRunner-web/internal/modules/programingLanguages"
+	"github.com/Osmait/CodeRunner-web/internal/modules/dispacher"
 )
 
 type RunnerInterface interface {
-	Execute(code string, lang programinglanguages.ProgramingLanguages)
+	Execute(code string, lang string, output *dispacher.Dispacher) error
 }
 
 type Runner struct{}
@@ -21,7 +21,7 @@ func NewRunner() *Runner {
 	return &Runner{}
 }
 
-func (r *Runner) Execute(code string, lang string, output chan []byte) error {
+func (r *Runner) Execute(code string, lang string, output *dispacher.Dispacher) error {
 	// Ejemplo de comando que se ejecutará (en este caso, ls)
 	cmd := exec.Command("docker", "run", "--rm", "-i", "-v", fmt.Sprintf("%s:/app", filepath.Dir("temp.js")), "-w", "/app", "node:latest", "node", filepath.Base("temp.js"))
 
@@ -56,15 +56,14 @@ func (r *Runner) Execute(code string, lang string, output chan []byte) error {
 	}
 
 	log.Println("Comando finalizado y eliminado del canal.")
-	close(output) // Cerrar el canal al finalizar
 	return nil
 }
 
-func sendLogs(pipe io.ReadCloser, output chan []byte) {
+func sendLogs(pipe io.ReadCloser, output *dispacher.Dispacher) {
 	scanner := bufio.NewScanner(pipe)
 	for scanner.Scan() {
 		message := scanner.Text()
-		output <- []byte(message) // Enviar la salida al canal
+		output.Notifique([]byte(message))
 	}
 	if err := scanner.Err(); err != nil {
 		log.Println("Error leyendo el log:", err)

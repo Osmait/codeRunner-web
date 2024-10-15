@@ -1,36 +1,25 @@
 package coderunner
 
 import (
-	"fmt"
-
+	"github.com/Osmait/CodeRunner-web/internal/modules/dispacher"
 	programinglanguages "github.com/Osmait/CodeRunner-web/internal/modules/programingLanguages"
 	"github.com/Osmait/CodeRunner-web/internal/modules/runner"
 )
 
 type CodeRunner struct {
-	Runner *runner.Runner
+	Runner  runner.RunnerInterface
+	outputs *dispacher.Dispacher
 }
 
-func NewCodeRunner(runner *runner.Runner) *CodeRunner {
+func NewCodeRunner(runner runner.RunnerInterface, outputs *dispacher.Dispacher) *CodeRunner {
 	return &CodeRunner{
-		Runner: runner,
+		Runner:  runner,
+		outputs: outputs,
 	}
 }
 
 func (c *CodeRunner) RunCode() {
 	lang := programinglanguages.NewPrograminLanguages("python", "py", "python")
 	code := "2+2"
-	cn := make(chan []byte)
-
-	go func() {
-		for msg := range cn {
-			fmt.Println(string(msg))
-		}
-	}()
-
-	c.Runner.Execute(code, lang.GetName(), cn)
-}
-
-func (c *CodeRunner) Run() error {
-	return nil
+	c.Runner.Execute(code, lang.GetName(), c.outputs)
 }
