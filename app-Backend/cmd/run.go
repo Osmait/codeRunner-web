@@ -6,6 +6,7 @@ import (
 
 	coderunner "github.com/Osmait/CodeRunner-web/internal/app/CodeRunner"
 	"github.com/Osmait/CodeRunner-web/internal/modules/dispacher"
+	programinglanguages "github.com/Osmait/CodeRunner-web/internal/modules/programingLanguages"
 	"github.com/Osmait/CodeRunner-web/internal/modules/runner"
 	"github.com/spf13/cobra"
 )
@@ -22,10 +23,15 @@ var runCmd = &cobra.Command{
 		if language == "" || file == "" {
 			log.Fatal("Both --language and --file must be provided")
 		}
+
 		outputs := make(chan []byte)
 		output := dispacher.NewNotifier(outputs)
 		runner := runner.NewRunner() // Aquí debes inicializar el runner según tu implementación.
-		coderunner := coderunner.NewCodeRunner(runner, output)
+		availableLang := programinglanguages.NewAvailablePrograminLanguages()
+		if !availableLang.IsAvaliable(language) {
+			log.Fatal("languages not suported")
+		}
+		coderun := coderunner.NewCodeRunner(runner, output, availableLang)
 		go func() {
 			for v := range output.Consumer() {
 				fmt.Println((string(v)))
@@ -33,7 +39,8 @@ var runCmd = &cobra.Command{
 		}()
 
 		fmt.Println("Running the code...")
-		coderunner.RunCode()
+		codeRequest := coderunner.CodeRequest{Code: file, Lang: language}
+		coderun.RunCode(codeRequest)
 		fmt.Println("Code executed successfully.")
 	},
 }

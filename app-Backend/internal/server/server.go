@@ -10,6 +10,7 @@ import (
 
 	coderunner "github.com/Osmait/CodeRunner-web/internal/app/CodeRunner"
 	"github.com/Osmait/CodeRunner-web/internal/modules/dispacher"
+	programinglanguages "github.com/Osmait/CodeRunner-web/internal/modules/programingLanguages"
 	"github.com/Osmait/CodeRunner-web/internal/modules/runner"
 )
 
@@ -32,8 +33,11 @@ func New(ctx context.Context, host string, port uint, notifer *dispacher.Notifie
 func (s *Server) Routes() {
 	http.HandleFunc("/test", func(http.ResponseWriter, *http.Request) {
 		runner := runner.NewRunner()
-		app := coderunner.NewCodeRunner(runner, s.Notifer)
-		app.RunCode()
+
+		availableLang := programinglanguages.NewAvailablePrograminLanguages()
+		app := coderunner.NewCodeRunner(runner, s.Notifer, availableLang)
+
+		app.RunCode(coderunner.CodeRequest{})
 	})
 	http.HandleFunc("/ws", handlerWebSocket(s.Notifer))
 }

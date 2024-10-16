@@ -11,6 +11,7 @@ func NewAvailablePrograminLanguages() *AvailablePrograminLanguages {
 		Availables: []*ProgramingLanguages{
 			NewPrograminLanguages("python", "py", "python"),
 			NewPrograminLanguages("javascript", "js", "node"),
+			NewPrograminLanguages("go", "go", "golang"),
 		},
 	}
 }

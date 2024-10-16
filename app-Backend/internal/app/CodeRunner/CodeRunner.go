@@ -7,19 +7,20 @@ import (
 )
 
 type CodeRunner struct {
-	Runner  runner.RunnerInterface
-	outputs *dispacher.Notifier
+	Runner                    runner.RunnerInterface
+	outputs                   *dispacher.Notifier
+	listOfProgramingLanguages *programinglanguages.AvailablePrograminLanguages
 }
 
-func NewCodeRunner(runner runner.RunnerInterface, outputs *dispacher.Notifier) *CodeRunner {
+func NewCodeRunner(runner runner.RunnerInterface, outputs *dispacher.Notifier, availablePrograminLanguages *programinglanguages.AvailablePrograminLanguages) *CodeRunner {
 	return &CodeRunner{
-		Runner:  runner,
-		outputs: outputs,
+		Runner:                    runner,
+		outputs:                   outputs,
+		listOfProgramingLanguages: availablePrograminLanguages,
 	}
 }
 
-func (c *CodeRunner) RunCode() {
-	lang := programinglanguages.NewPrograminLanguages("python", "py", "python")
-	code := "2+2"
-	c.Runner.Execute(code, lang.GetName(), c.outputs)
+func (c *CodeRunner) RunCode(codeRequest CodeRequest) {
+	result, _ := c.listOfProgramingLanguages.SearchLanguage(codeRequest.Lang)
+	c.Runner.Execute(codeRequest.Code, result, c.outputs)
 }

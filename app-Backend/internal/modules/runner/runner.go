@@ -9,10 +9,11 @@ import (
 	"path/filepath"
 
 	"github.com/Osmait/CodeRunner-web/internal/modules/dispacher"
+	programinglanguages "github.com/Osmait/CodeRunner-web/internal/modules/programingLanguages"
 )
 
 type RunnerInterface interface {
-	Execute(code string, lang string, output *dispacher.Notifier) error
+	Execute(code string, lang *programinglanguages.ProgramingLanguages, output *dispacher.Notifier) error
 }
 
 type Runner struct{}
@@ -21,9 +22,9 @@ func NewRunner() *Runner {
 	return &Runner{}
 }
 
-func (r *Runner) Execute(code string, lang string, output *dispacher.Notifier) error {
+func (r *Runner) Execute(code string, lang *programinglanguages.ProgramingLanguages, output *dispacher.Notifier) error {
 	// Ejemplo de comando que se ejecutará (en este caso, ls)
-	cmd := exec.Command("docker", "run", "--rm", "-i", "-v", fmt.Sprintf("%s:/app", filepath.Dir("temp.js")), "-w", "/app", "node:latest", "node", filepath.Base("temp.js"))
+	cmd := exec.Command("docker", "run", "--rm", "-i", "-v", fmt.Sprintf("%s:/app", filepath.Dir(fmt.Sprintf("temp.%s", lang.GetExtension()))), "-w", "/app", fmt.Sprintf("%s:latest", lang.GetRunner()), lang.GetRunner(), filepath.Base(code))
 
 	// Capturar salida estándar del comando
 	stdout, err := cmd.StdoutPipe()
